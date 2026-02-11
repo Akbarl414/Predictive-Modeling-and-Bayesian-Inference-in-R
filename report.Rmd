@@ -1,0 +1,272 @@
+---
+title: 'Predictive Modeling and Bayesian Inference'
+author: "Akbar Latif"
+output:
+  html_document:
+    number_sections: yes
+  pdf_document:
+    number_sections: yes
+header-includes:
+  - \usepackage{bold-extra}
+  - \usepackage[T1]{fontenc}
+  - \newcommand{\bm}[1]{\boldsymbol{#1}}
+  - \newcommand{\mat}[1]{\begin{bmatrix}#1\end{bmatrix}}
+  - \newcommand{\Normal}[1]{\text{Normal}}
+---
+
+```{r setup, include = FALSE}
+# Set default code chunk options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE
+)
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(gridExtra))
+
+# theme_set(theme_bw())
+
+# To give the same random number sequence every time the document is knit:ed,
+# making it easier to discuss the specific numbers in the text:
+set.seed(12345L)
+```
+
+```{r code=readLines("code.R"), eval=TRUE, echo=FALSE, results='hide'}
+# Do not change this code chunk
+# Load function definitions
+source("code.R")
+```
+
+# Part 1: 3D printer
+
+```{r, eval = TRUE, echo = FALSE}
+#First load in the 3D printer data
+load("filament1.rda")
+```
+
+In this part we will look at $\texttt{filament1}$ data from a 3D printer that uses rolls of $\textit{filament}$ that get heated and squeezed through a moving nozzle, gradually building objects. The objects are designed in CAD that estimates how much material will be required to print them. The data file `"filament1.rda"` contains information about one 3D-printed object per row. The columns are:
+
+-   $\texttt{Index:}$ an observation index
+-   $\texttt{Date:}$ printing dates
+-   $\texttt{Material:}$ the printing material, identified by its colour
+-   $\texttt{CAD_Weight:}$ the object weight (in grams) that the CAD software calculated
+-   $\texttt{Actual_Weight:}$ the actual weight of the object (in grams) after printing.
+
+We are considering two linear models, A and B, for capturing the relationship between $\textsf{CAD_Weight}$ and $\textsf{Actual_Weight}$. Denote the $\textsf{CAD_weight}$ for observation $i$ as $x_i$, and the corresponding $\textsf{Actual_Weight}$ as $y_i$. As in Project 1, the two models are defined by:
+
+-   Model A: $y_i ∼ \Normal{} [β_1 + β_2x_i, \exp(β_3 + β_4x_i)]$
+-   Model B: $y_i ∼ \Normal{} [β_1 + β_2x_i, \exp(β_3) + \exp(β_4)x_i^2 ]$.
+
+## Prediction
+
+Now using these models and the function `filament1_predict` I will compute the probabilistic prediction distributions, and 95% significance prediction intervals where the function will output the meand and standard deviations of each item and then give the lwr and upper bounds of the 95% prediction intervals. I will then run the code and display the predictive plots for model A and model B.
+
+```{r, eval=TRUE, echo = FALSE}
+#Now run the Prediciton values for each of the given models
+pred_A <- filament1_predict(filament1, "A", filament1)
+pred_B <- filament1_predict(filament1, "B", filament1)
+
+# beta <- filament1_estimate(newdata, model)
+# newdata = filament1
+# model = "A"
+# 
+# Sigma_beta <- solve(beta$hessian)
+# EV <- filament1_aux_EV(beta$par, newdata, model, Sigma_beta)
+# EV
+
+#plot the graph of the prediction models as well as their upper and lower bounds
+ggplot(rbind(cbind(pred_A, filament1, Model = "A"), cbind(pred_B, filament1, Model = "B")), mapping = aes(CAD_Weight)) +
+geom_line(aes(y = mean, col = Model)) +
+geom_ribbon(aes(ymin = lwr, ymax = upr, fill = Model), alpha = 0.25) + 
+geom_point(aes(y = Actual_Weight), data = filament1) +
+ggtitle('Estimation and prediction intervals')
+
+```
+
+The plot clearly shows that the two models esitmate the $\texttt{CAD_Weight}$ quite well when the weight is lower, as it is almost completely linear on the $y = x$ line, but as it gets bigger, the variance in estimation grows as well. We can also see that all mean values are in the prediction interval which tells us that both models are consistent in their predictions as well as the models being precise in their predicitions. The prediction interval for the lower CAD_weights shows a high level of precision and certainty, but as the CAD_Weights grow the prediction interval grows for both models showing that the predicitons are more uncertain for higher weights. Also notice that model A has a bigger prediction interval than B, so A has a higher level of uncertainty than B. 
+
+## Scoring
+
+The Standard Error (SE) and Dawid-Sebastiani (DS) are two different ways of data scoring.
+
+Squared error scoring is a commonly used metric in regression analysis to measure the average squared difference between the predicted values and the actual values in a dataset. It is the difference in the actual value minus predicted mean for the value by the model squared i.e.,
+
+$$ \text{SE}: S_{SE}(F,y) = (y - \widehat{y}_F) $$
+
+Where:
+
+-   $y$ is the true value
+-   $\hat{y}_F$ is the predicted mean at that $y$
+
+Squared error scoring is preferred in many contexts because it penalizes larger errors more heavily than smaller errors due to the squaring operation. This means that larger deviations between predicted and actual values contribute proportionally more to the overall score, making the metric sensitive to outliers or large errors in prediction.
+
+Dawid-Sebastiani's method of scoring is another method for scoring used in the analysis of models.
+
+$$DS: S_{DS}(F,y) = \frac{(y - \mu_F)^2}{\sigma_F^2} + \log(\sigma_F^2) $$
+
+Where:
+
+-   $y$ is the true value
+-   $\mu_F$ is the predicted mean at that $y$ by the model F
+-   $\sigma_F^2$ is the predicted variance at that $y$ by the model F
+
+Both of these methods for scoring are good methods for telling how good models are on accuracy and consistency on accurately predicting data and can be coded by the functions shown below.
+
+```{r, eval = TRUE, echo = FALSE}
+#Now compute the socres of our predictions using the score functions
+se_A <- square_error_score(cbind(filament1, pred_A))
+se_B <- square_error_score(cbind(filament1, pred_B))
+
+scores_A <- ds_score(se_A)
+scores_B <- ds_score(se_B)
+
+```
+
+```{r, eval = FALSE, echo = TRUE}
+#' square_error_score
+#'
+square_error_score <- function(prediction){
+  score <- prediction %>% 
+    mutate(
+      se = ((Actual_Weight - mean))^2)
+}
+
+
+#' ds_score
+#'
+ds_score <- function (prediction){
+  score <- prediction %>% 
+    mutate(
+  ds = (Actual_Weight - mean)^2/sd^2 + 2 * log(sd))
+
+}
+
+```
+
+## Leave One Out
+
+Leave-one-out cross-validation(LOOCV) is a way of testing how accurate a model is at predicting data. The technique leaves one data point out at a time and runs the model without it then check the predicted data against the left out point. Then the process is repeated for the rest of the datasetn and then combined with all the other tests into a summary. This technique is useful with smaller data sets as with larger ones the performing this can take a long time as you have to repeatedly run the model for each data point. It is an unbiased testing method as the data is compared against itself.
+1
+In this task we performed leave-one-out cross-validation as returned the averge Square Error and Dawid-Sebastiani scores for each model as you can see in the table below:
+
+```{r, eval = TRUE, echo = FALSE}
+#Perform the leave one out functions for each model
+leave_out_A <- leave1out(filament1, "A")
+leave_out_B <- leave1out(filament1, "B")
+
+
+avg_se_A <- mean(leave_out_A$se)
+avg_ds_A <- mean(leave_out_A$ds)
+avg_se_B <- mean(leave_out_B$se)
+avg_ds_B <- mean(leave_out_B$ds)
+
+#output the averages for each one in an appropriate table
+averages <- data.frame("Model" = c("A","B"), "Average Square Error" = c(avg_se_A,avg_se_B), "Average DS Score" = c(avg_ds_A, avg_ds_B))
+knitr::kable(averages)
+
+
+```
+When looking at the table above the average Square Error shows that the models are quite similar but we can expect this since the means for both models are the same, so the square error scores do not tell us too much about the models. The Dawid-Sebastiani scores are different as we know that they rely on variance of the models in their calculations, so when looking at the different scores we can see that Model B is better in its prediction since it gives a lower averge DS score. We know that for DS scores the lower is a better predictor with a higher accuracy. 
+
+```{r, eval = TRUE, echo = FALSE}
+#plot the leave out out estimates for their scores
+SE_plot <- ggplot() +
+geom_point(aes(CAD_Weight, se, colour = "A"), data = leave_out_A) + geom_point(aes(CAD_Weight, se, colour = "B"), data = leave_out_B) + ggtitle('SE Scores on Leave one out')
+
+DS_plot <- ggplot() +
+geom_point(aes(CAD_Weight, ds, colour = "A"), data = leave_out_A) + geom_point(aes(CAD_Weight, ds, colour = "B"), data = leave_out_B) + ggtitle('DS Scores on Leave one out')
+
+grid.arrange(SE_plot,DS_plot, ncol = 2, widths = c(10,10), heights = c(3,3))
+```
+
+We can look at these two graphs of the scores in the LOOCV and conclude that the models are quite similar in their estimation. Looking at SE the scores are almost identical in the lower CAD_Weights, but in the higher weights the error grows and overall it looks like model B performs slightly better. In Looking as the DS scores we can conclude that model B is slightly better as is varies less where A will jump quite a bit and have higher jumps in error than B. 
+
+
+## Monte-Carlo methods for p-Values
+
+Using Monte-Carlo estimation we can find the p-value of the scores to test the interchangability between methods of scoring. We computed the p values for the models using the LOOCV data and a sample size of `N = 10000` to test the null hypothesis that the mdoels are interchangable versus the alternate hypothesis that model B outperforms model A. The results of the tesing are displayed below:
+
+pairwise exchangable
+
+```{r, eval = TRUE, echo = FALSE}
+
+
+N <- 10000 
+p_values <- Monte_p(leave_out_A, leave_out_B, N)
+p_table <- data.frame(Score = "p value:", p_values)
+knitr::kable(p_table)
+
+```
+We can see from the table that the p value associated with the SE score is 0.4989 which is high enough to lead us to fail to reject the null hypothesis. Conversely the p value associated with the DS score is small enough at 0.0436 to allow us to reject the null hypothesis since it is lower than 0.05. We can point this difference in p value to many different factors. First and foremost is the fact that the DS score relies on the variance of the models which the SE score does not, so the p value for DS may account for that allowing it to be smaller. We can continue analysis futher by looking at the standard errors of these values:
+
+```{r, eval =TRUE, echo = FALSE}
+standard_error_se <- sqrt((p_values[1]* (1-p_values[1])) / N)
+standard_error_ds <- sqrt((p_values[2]* (1-p_values[2])) / N)
+standard_errors <- data.frame(Score = "Standard Error:", se = standard_error_se, ds = standard_error_ds)
+
+knitr::kable(standard_errors)
+
+```
+In looking at the standard errors in the above table we can conclude that the the DS p value is better as its standard error is less than half of the SE standard error. Finally a thing to note about these exchangability is that this test looks at pairwise exchanges and not total model exchages as we are using the LOOCV data. 
+
+
+# Part 2: Archaeology in the Baltic sea
+In this question we are looking at estimating how many people were buried in a gravesite based upon the amount of femurs found in the site. We observe the number of left and right femurs show as $(y_1 = 256)$ and $(y_2 = 237)$ where $y_1$ represents the number of left femurs and $y_2$ represents the number of right femurs. 
+
+We build this model from a BIN$(N, \phi)$ distribuition. Where $N$ is total number of people buried and $\phi$ is the probability of finding a femur, left or right, or both. In this model both $N$ and $\phi$ are unknown parameters. The probability funciton for a single observation $y \sim \text{BIN}(N, \phi) $ is 
+\[
+p(y|N,\phi) = {N\choose y} \phi^y (1- \phi)^{N-y}.
+\] 
+The combined $\textit{log-likelihood} \,\, l(y_1,y_2|N,\phi) = \log p(y_1,y_2|N,\phi)$ for the data set $\{y_1,y_2\}$ is given by
+\[
+\begin{align*}
+l(y_1,y_2|N, \phi) &= -\log\Gamma(y_1 +1) - \log\Gamma(y_2 +1)\\
+&- \log\Gamma(N - y_1 + 1) - \log\Gamma(N-y_2+1) + 2\log\Gamma(N+1)\\
+&+ (y_1 + y_2)\log(\phi) + (2N - y_1 -y_2)\log(1-\phi)
+\end{align*}
+\]
+
+The archeologist belived that there were 1000 femurs in the sight and that they would find about half, so we encode this belief through Bayesian analysis. We use $\xi  = 1/(1+1000)$, which corresponds to an expected 1000 and $a = b = 2$, which makes $\phi$ more likely to be close to 1/2 than to 0 or 1. 
+
+We now model the posterior probability for $(N, \phi|y)$
+\[
+p_{N, \phi|y}(n, \phi|y) = \frac{p_{N, \phi|y}(n,\phi,y) }{p_y(\mathbf{y})} = \frac{p_N(n)p_\phi(\phi)p(y|n,\phi)}{p_y(y)}
+\]
+
+Let N have a Geom($\xi$), $\xi >0 $, prior and $\phi$ have a Beta($a,b$), $a,b >0$ prior,
+\[
+\begin{gather*}
+p_N(n)= P(N=n) = \xi (1-\xi)^n,\quad n = 0,1,2,3...,\\
+p_\phi(\phi) = \frac{\phi^{a-1}(1-\phi)^{b-1}}{B(a,b)}, \quad \phi \in [0,1].
+\end{gather*}
+\]
+
+We are now going to use Monte Carlo integration using the above prior distributions and sames distrubuted as $n^{[k]} \sim \text{Geom}(\xi)$ and $\phi^{[k]} \sim \text{Beta}(a,b)$ and used to compute the Monte Carlo estimates:
+
+
+\begin{align*}
+  \widehat{p}_y(y) &= \frac{1}{K}\sum\limits_{k=1}^Kp(y|n^{[k]}, \phi^{[k]})\\
+  \widehat{E}(N|y) &=  \frac{1}{K\widehat{p}_y(y)}\sum\limits_{k=1}^K n^{[k]}p(y|n^{[k]}, \phi^{[k]})  \\
+ \widehat{E}(\phi|y) &=  \frac{1}{K\widehat{p}_y(y)}\sum\limits_{k=1}^K \phi^{[k]}p(y|n^{[k]}, \phi^{[k]})
+
+\end{align*}
+
+
+Where $\widehat{p}_y(y)$ is our normalizing constant for the prior distribution. $\widehat{E}(N|y)$ is our expected number of buried people given the observations, and $\widehat{E}(\phi|y) $ is our expected probability of finding a femur. 
+
+We now run the `estimate` code with the data $y_1 = 237,\, y_2 = 256$ and $a = b= 0.5$ and for 10000 samples. And display the results in the table below. 
+
+```{r, eval = TRUE, echo = FALSE}
+
+result <- estimate(y = c(237, 256), xi = 1/1001, a = 0.5, b = 0.5, K = 10000)
+output <- data.frame(result)
+knitr::kable(output)
+```
+
+Our result show us that there were an expected 982 bodies buried, and we had a probability of 0.374 of finding a femur. Since the scienctists believed that there were 1000 bodies buried, our result of 982 is not that far off. Altough our $\phi$ results given the observations is much lower. This result shows that the monte carlo integration is slightly off for calculating the phi. For further analysis we would need ot compute the standard error and determine where the error is. Another reason for finding so few could be in the fact that the bodies were buried so long ago. 
+
+
+# Code appendix
+
+```{r code=readLines("code.R"), eval=FALSE, echo=TRUE}
+# Do not change this code chunk
+```
