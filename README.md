@@ -6,35 +6,35 @@ Two applied statistical modeling exercises implemented from scratch in R using a
 
 ## Part 1 — Predicting 3D Printed Object Weight
 
-Modeled the relationship between CAD-estimated weight `x` and actual weight `y` using heteroscedastic Gaussian regression models.
+Modeled the relationship between CAD-estimated weight $x$ and actual weight $y$ using heteroscedastic Gaussian regression models.
 
 ### Mathematical Framework
 
 Each observation is modeled as:
 
-$begin:math:display$
-Y\_i \\sim \\mathcal\{N\}\(\\mu\_i\, \\sigma\_i\^2\)
-$end:math:display$
+$$
+Y_i \sim \mathcal{N}(\mu_i, \sigma_i^2)
+$$
 
-with:
+with mean structure
 
-$begin:math:display$
-\\mu\_i \= \\beta\_1 \+ \\beta\_2 x\_i
-$end:math:display$
+$$
+\mu_i = \beta_1 + \beta_2 x_i
+$$
 
-Two alternative variance structures were implemented:
+Two alternative variance structures were implemented.
 
 **Model A**
 
-$begin:math:display$
-\\sigma\_i\^2 \= \\exp\(\\beta\_3 \+ \\beta\_4 x\_i\)
-$end:math:display$
+$$
+\sigma_i^2 = \exp(\beta_3 + \beta_4 x_i)
+$$
 
 **Model B**
 
-$begin:math:display$
-\\sigma\_i\^2 \= \\exp\(\\beta\_3\) \+ \\exp\(\\beta\_4\) x\_i\^2
-$end:math:display$
+$$
+\sigma_i^2 = \exp(\beta_3) + \exp(\beta_4) x_i^2
+$$
 
 Parameters were estimated via maximum likelihood by minimizing the negative log-likelihood.
 
@@ -52,31 +52,31 @@ A Monte Carlo test was used to assess whether one model provided significantly b
 
 ## Part 2 — Bayesian Estimation of Burial Counts
 
-Estimated total population size `N` and recovery probability `φ` from observed femur counts.
+Estimated total population size $N$ and recovery probability $\phi$ from observed femur counts.
 
 ### Model
 
-$begin:math:display$
-Y\_1\, Y\_2 \\sim \\text\{Binomial\}\(N\, \\phi\)
-$end:math:display$
+$$
+Y_1, Y_2 \sim \text{Binomial}(N, \phi)
+$$
 
-with priors:
+with priors
 
-$begin:math:display$
-N \\sim \\text\{Geometric\}\(\\xi\)
-$end:math:display$
+$$
+N \sim \text{Geometric}(\xi)
+$$
 
-$begin:math:display$
-\\phi \\sim \\text\{Beta\}\(a\, b\)
-$end:math:display$
+$$
+\phi \sim \text{Beta}(a, b)
+$$
 
 Posterior expectations were approximated using Monte Carlo integration:
 
-$begin:math:display$
-\\hat\{E\}\[N \\mid y\] \=
-\\frac\{\\sum\_k N\^\{\(k\)\} p\(y \\mid N\^\{\(k\)\}\, \\phi\^\{\(k\)\}\)\}
-\{\\sum\_k p\(y \\mid N\^\{\(k\)\}\, \\phi\^\{\(k\)\}\)\}
-$end:math:display$
+$$
+\hat{E}[N \mid y] =
+\frac{\sum_k N^{(k)} p(y \mid N^{(k)}, \phi^{(k)})}
+{\sum_k p(y \mid N^{(k)}, \phi^{(k)})}
+$$
 
 All likelihood calculations were implemented using log-Gamma functions for numerical stability.
 
@@ -92,12 +92,3 @@ All likelihood calculations were implemented using log-Gamma functions for numer
 - Fully reproducible RMarkdown workflow  
 
 ---
-
-## Structure
-
-```
-├── report.Rmd
-├── code.R
-├── report.html
-└── README.md
-```
